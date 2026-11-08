@@ -78,7 +78,14 @@ th:first-child,td:first-child{text-align:left}
     <div class="legend" id="legEq"></div>
   </section>
 
-  <section class="card">
+  <section class="card" id="fundCard" style="display:none">
+    <h2>Fondo multi-activo · composición</h2>
+    <div id="fundBar" style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:#21262d;margin-bottom:8px"></div>
+    <div class="scroll"><table><thead><tr><th>Activo</th><th>Peso</th><th>Valor</th><th>Resultado</th><th>Momentum 14 d</th><th>vs media 7 d</th><th>Estado hoy</th></tr></thead><tbody id="tFund"></tbody></table></div>
+    <p class="note" id="fundNote"></p>
+  </section>
+
+  <section class="card" id="pxCard">
     <h2 id="hPrice">Precio y operaciones</h2>
     <canvas id="cPx"></canvas>
     <div class="legend"><span><i style="background:#8b949e"></i>Precio (cierre de vela)</span><span><i style="background:#2ea043"></i>Compra</span><span><i style="background:#f85149"></i>Venta</span></div>
@@ -105,7 +112,8 @@ th:first-child,td:first-child{text-align:left}
 <script>
 "use strict";
 const $=id=>document.getElementById(id), TZ="Europe/Madrid";
-const COLORS={tsmom:"#4c8dff",trend:"#a371f7",cross:"#3fb950",rsi:"#d29922",hold:"#8b949e"};
+const COLORS={tsmom:"#4c8dff",trend:"#a371f7",cross:"#3fb950",rsi:"#d29922",hold:"#8b949e",fund:"#f778ba",index:"#56d4dd"};
+const isF=id=>id==="fund"||id==="index";
 const col=id=>COLORS[id]||"#79c0ff";
 const n=(x,d=2)=>isFinite(x)?x.toLocaleString("es-ES",{minimumFractionDigits:d,maximumFractionDigits:d}):"—";
 const eur=x=>n(x, Math.abs(x)>=1000?0:2)+" €";
@@ -135,14 +143,14 @@ function render(){ if(!S) return; const c=S.config, now=Date.now()/1000;
   if(S.nextCandleClose){const l=S.nextCandleClose-now;$("next").textContent=l>0?`${dt(S.nextCandleClose,{hour:"2-digit",minute:"2-digit"})} (en ${Math.ceil(l/60)} min)`:"procesándose en la próxima ejecución";}
   // tarjetas
   const today=dayKey(now); const firstToday=S.curve.find(p=>dayKey(p.t)===today);
-  const rows=S.strategies.map(s=>{const pf=S.portfolios[s.id],eq=pf.cash+pf.qty*S.price;return{s,pf,eq,ret:eq/pf.start-1,day:firstToday&&firstToday[s.id]?eq/firstToday[s.id]-1:0};}).sort((a,b)=>b.eq-a.eq);
-  $("strats").innerHTML=rows.map((r,i)=>{const pos=r.pf.qty>0;const pnl=pos?r.pf.qty*S.price*(1-c.slippage)*(1-c.fee)-r.pf.entryCost:0;
+  const rows=S.strategies.filter(s=>S.portfolios[s.id]).map(s=>{const pf=S.portfolios[s.id],eq=pf.equity!=null?pf.equity:pf.cash+pf.qty*S.price;return{s,pf,eq,ret:eq/pf.start-1,day:firstToday&&firstToday[s.id]?eq/firstToday[s.id]-1:0};}).sort((a,b)=>b.eq-a.eq);
+  $("strats").innerHTML=rows.map((r,i)=>{const fd=isF(r.s.id);const pos=fd?Object.keys(r.pf.hold||{}).length>0:r.pf.qty>0;const pnl=fd?r.eq-r.pf.cash-Object.values(r.pf.cost||{}).reduce((a,b)=>a+b,0):(pos?r.pf.qty*S.price*(1-c.slippage)*(1-c.fee)-r.pf.entryCost:0);
     return `<div class="st ${r.s.id===SEL?"sel":""}" data-id="${r.s.id}"><span class="rank">#${i+1}</span>
-    <div class="name"><span class="dot" style="background:${col(r.s.id)}"></span>${r.s.name}</div>
+    <div class="name"><span class="dot" style="background:${col(r.s.id)}"></span>${r.s.name}${fd?' <span class="pill" style="font-size:10px;padding:1px 6px">multi-activo</span>':''}</div>
     <div class="val ${r.ret>0?"up":r.ret<0?"dn":""}">${eur(r.eq)}</div>
     <div class="row"><span>Total</span><span class="${r.ret>0?"up":r.ret<0?"dn":""}">${pct(r.ret)}</span></div>
     <div class="row"><span>Hoy</span><span class="${r.day>0?"up":r.day<0?"dn":""}">${pct(r.day)}</span></div>
-    <div class="row"><span>${pos?"Comprado":"En liquidez"}</span><span>${pos?`${pnl>=0?"+":""}${eur(pnl)} abierta`:(r.pf.halted?"pausa hasta mañana":r.pf.stopped?"tras stop":"esperando señal")}</span></div>
+    <div class="row"><span>${fd?(pos?"Invertido "+n((1-r.pf.cash/r.eq)*100,0)+" %":"En liquidez"):(pos?"Comprado":"En liquidez")}</span><span>${pos?`${pnl>=0?"+":""}${eur(pnl)} abierta`:(r.pf.halted?"pausa hasta mañana":r.pf.stopped?"tras stop":"esperando señal")}</span></div>
     <div class="row"><span>${r.pf.trades.length} operaciones</span><span>comisiones ${eur(r.pf.fees)}</span></div>
     <div class="row" style="white-space:normal"><span>${r.pf.lastTxt||""}</span></div></div>`;}).join("");
   document.querySelectorAll(".st").forEach(el=>el.onclick=()=>{SEL=el.dataset.id;render();});
@@ -152,17 +160,27 @@ function render(){ if(!S) return; const c=S.config, now=Date.now()/1000;
   draw($("cEq"),S.strategies.map(s=>({color:col(s.id),w:s.id===SEL?2.6:1.4,pts:cv.filter(p=>p[s.id]!=null).map(p=>[p.t,p[s.id]])})),null,v=>n(v,v>=1000?0:2));
   $("legEq").innerHTML=S.strategies.map(s=>`<span><i style="background:${col(s.id)}"></i>${s.name}</span>`).join("");
   // precio + operaciones de la seleccionada
-  const pf=S.portfolios[sel.id]; $("hPrice").textContent=`Precio y operaciones · ${sel.name}`; $("hTr").textContent=`Operaciones · ${sel.name}`;
-  draw($("cPx"),[{color:"#8b949e",pts:S.candles.map(k=>[k[0],k[1]])}],pf.trades.map(t=>({t:t.t,y:t.price,buy:t.side==="COMPRA"})),v=>n(v,0));
-  $("tTr").innerHTML=pf.trades.slice().reverse().map(t=>`<tr><td>${dt(t.t)}</td><td><span class="tag ${t.side==="COMPRA"?"b":"s"}">${t.side}</span></td><td>${n(t.price)}</td><td>${eur(t.amount)}</td><td>${t.side==="VENTA"?`<span class="${t.pnl>=0?"up":"dn"}">${eur(t.pnl)} (${pct(t.pnlPct)})</span>`:`<span class="note">${t.reason}</span>`}</td></tr>`).join("")||`<tr><td colspan="5" class="note">Todavía no ha operado.</td></tr>`;
+  const pf=S.portfolios[sel.id]; $("hPrice").textContent=`Precio BTC/EUR y operaciones · ${sel.name}`; $("hTr").textContent=`Operaciones · ${sel.name}`;
+  $("pxCard").style.display=isF(sel.id)?"none":""; renderFund();
+  if(!isF(sel.id)) draw($("cPx"),[{color:"#8b949e",pts:S.candles.map(k=>[k[0],k[1]])}],pf.trades.map(t=>({t:t.t,y:t.price,buy:t.side==="COMPRA"})),v=>n(v,0));
+  $("tTr").innerHTML=pf.trades.slice().reverse().map(t=>`<tr><td>${dt(t.t)}</td><td><span class="tag ${t.side==="COMPRA"?"b":"s"}">${t.side}${t.asset?" "+t.asset:""}</span></td><td>${n(t.price)}</td><td>${eur(t.amount)}</td><td>${t.side==="VENTA"?`<span class="${t.pnl>=0?"up":"dn"}">${eur(t.pnl)} (${pct(t.pnlPct)})</span>`:`<span class="note">${t.reason}</span>`}</td></tr>`).join("")||`<tr><td colspan="5" class="note">Todavía no ha operado.</td></tr>`;
   // registro
-  $("log").innerHTML=S.log.slice().reverse().map(l=>`<div class="${l.kind==="b"?"up":l.kind==="s"?"dn":""}"><span class="t">${dt(l.t)}</span>${l.msg}</div>`).join("");
+  $("log").innerHTML=S.log.slice().reverse().map(l=>`<div class="${l.kind==="b"?"up":l.kind==="s"?"dn":""}" style="${l.kind==="w"?"color:#f0d38a":""}"><span class="t">${dt(l.t)}</span>${l.msg}</div>`).join("");
   // backtest
   const b0=Object.values(S.backtest)[0]; if(b0&&b0.from) $("btInfo").textContent=`Del ${dt(b0.from)} al ${dt(b0.to)}, con las mismas reglas, comisión ${n(c.fee*100)} % y slippage ${n(c.slippage*100)} %. Es solo orientativo: un periodo tan corto no demuestra nada.`;
-  $("tBt").innerHTML=S.strategies.map(s=>{const b=S.backtest[s.id];return `<tr><td><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col(s.id)};margin-right:6px"></span>${s.name}</td><td class="${b.ret>0?"up":"dn"}">${pct(b.ret)}</td><td class="dn">${pct(b.mdd)}</td><td>${b.trades}</td><td>${b.winRate==null?"—":n(b.winRate*100,0)+" %"}</td><td>${eur(b.fees)}</td></tr>`;}).join("");
+  $("tBt").innerHTML=S.strategies.filter(s=>S.backtest[s.id]).map(s=>{const b=S.backtest[s.id];return `<tr><td><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col(s.id)};margin-right:6px"></span>${s.name}</td><td class="${b.ret>0?"up":"dn"}">${pct(b.ret)}</td><td class="dn">${pct(b.mdd)}</td><td>${b.trades}</td><td>${b.winRate==null?"—":n(b.winRate*100,0)+" %"}</td><td>${eur(b.fees)}</td></tr>`;}).join("");
   $("foot").innerHTML=`<b>Qué es esto.</b> Un bot que se ejecuta solo cada ~15 minutos en GitHub Actions, lee los precios reales de ${c.label} en Kraken y simula órdenes a mercado al cierre de cada vela. Cobra ${n(c.fee*100)} % de comisión y ${n(c.slippage*100)} % de slippage por operación, con stop-loss del ${n(c.stopLoss*100,1)} % y pausa si una cartera pierde un ${n(c.maxDailyLoss*100,1)} % en el día. No mueve dinero real. Los horarios de GitHub pueden retrasarse unos minutos. Resultados pasados no garantizan los futuros. No es asesoramiento financiero.`;
 }
 
+const ACOL=["#f7931a","#627eea","#14f195","#23a3ff","#3468d1","#2a5ada","#d4af37","#8b949e"];
+function renderFund(){ const f=S.portfolios.fund; if(!f){$("fundCard").style.display="none";return;} $("fundCard").style.display="";
+  const fc=S.fundConfig||{}, E=f.equity, P=Object.assign({},S.fundPrices||{},f.prices||{}); const assets=(fc.assets||[]).map(a=>a.symbol);
+  const rows=assets.map((a,i)=>{const q=(f.hold||{})[a]||0,v=q*(P[a]||0),cost=(f.cost||{})[a]||0,sc=(f.scores||{})[a]||{};return{a,i,v,w:E?v/E:0,pnl:q?v-cost:null,pp:q&&cost?v/cost-1:null,sc};});
+  $("fundBar").innerHTML=rows.filter(r=>r.w>0.001).map(r=>`<div title="${r.a}" style="width:${r.w*100}%;background:${ACOL[r.i%ACOL.length]}"></div>`).join("")+`<div style="flex:1;background:#30363d" title="Liquidez"></div>`;
+  $("tFund").innerHTML=rows.map(r=>`<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${ACOL[r.i%ACOL.length]};margin-right:6px"></span>${r.a}</td><td>${r.w>0?n(r.w*100,1)+" %":"—"}</td><td>${r.v>0?eur(r.v):"—"}</td><td class="${r.pnl>0?"up":r.pnl<0?"dn":""}">${r.pnl==null?"—":eur(r.pnl)+" ("+pct(r.pp)+")"}</td><td class="${r.sc.mom>0?"up":r.sc.mom<0?"dn":""}">${r.sc.mom!=null?pct(r.sc.mom):"—"}</td><td class="${r.sc.trend>0?"up":r.sc.trend<0?"dn":""}">${r.sc.trend!=null?pct(r.sc.trend):"—"}</td><td>${r.sc.ok?`<span class="tag b">apto ${n((r.sc.target||0)*100,0)} %</span>`:`<span class="note">${r.sc.why||"—"}</span>`}</td></tr>`).join("")
+    +`<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#30363d;margin-right:6px"></span>Liquidez (EUR)</td><td>${n(f.cash/E*100,1)} %</td><td>${eur(f.cash)}</td><td colspan="4"></td></tr>`;
+  $("fundNote").textContent=`${fc.desc||""} Última revisión: ${f.lastRebalance||"—"}. «Estado hoy» es lo que el fondo haría si revisara ahora; solo opera en la revisión diaria.`;
+}
 async function load(){ try{ const r=await fetch("data/state.json?ts="+Date.now(),{cache:"no-store"}); if(!r.ok) throw new Error(r.status); S=await r.json(); $("err").style.display="none"; render(); }
   catch(e){ $("err").style.display="block"; $("err").textContent="No he podido cargar los datos del bot ("+e.message+"). Si acabas de crearlo, espera a la primera ejecución."; } }
 $("range").onclick=e=>{const b=e.target.closest("button");if(!b)return;RANGE=+b.dataset.r;document.querySelectorAll("#range button").forEach(x=>x.classList.toggle("on",x===b));render();};

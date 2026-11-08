@@ -10,6 +10,7 @@ Cada ejecución (GitHub Actions, cada ~15 min):
 No envía órdenes reales: simula órdenes a mercado con comisión y slippage.
 """
 import json, os, sys, time, urllib.request
+import fund
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -49,6 +50,15 @@ def fetch_price(pair):
         raise RuntimeError(j["error"])
     v = list(j["result"].values())[0]
     return float(v["c"][0])
+
+def fetch_prices(pairs):
+    out = {}
+    for p in pairs:
+        try:
+            out[p] = fetch_price(p)
+        except Exception:  # noqa: si falla, se usa el último cierre
+            pass
+    return out
 
 # ---------------------------------------------------------- indicadores
 def sma_at(c, i, n):
@@ -284,11 +294,21 @@ def main():
         if not any(l["t"] == now and l["kind"] for l in state["log"]):
             log(f"Vela de las {datetime.fromtimestamp(k['t'], TZ):%H:%M} cerrada a {fmt(k['c'])} €. Ninguna estrategia cambia de posición.")
 
+    # ---- fondo multi-activo
+    try:
+        fund.run(state, cfg, now, fetch_ohlc, fetch_prices, log)
+    except Exception as e:  # noqa: el fondo nunca debe tumbar el bot de BTC
+        log(f"[Fondo] error en esta ejecución: {e}", "w")
+
     # ---- foto del momento
     point = {"t": now, "price": price}
     for st in strats:
         pf = state["portfolios"][st["id"]]
-        point[st["id"]] = round(pf["cash"] + pf["qty"] * price, 4)
+        pf["equity"] = pf["cash"] + pf["qty"] * price
+        point[st["id"]] = round(pf["equity"], 4)
+    for k in ("fund", "index"):
+        if k in state["portfolios"]:
+            point[k] = round(state["portfolios"][k]["equity"], 4)
     state["curve"].append(point)
     if len(state["curve"]) > MAX_CURVE:  # conserva todo lo reciente, aclara lo antiguo
         old, recent = state["curve"][:-MAX_CURVE // 2], state["curve"][-MAX_CURVE // 2:]
@@ -296,10 +316,15 @@ def main():
     state["log"] = state["log"][-MAX_LOG:]
     state.update({"updatedAt": now, "price": price, "nextCandleClose": partial["T"] if partial else None,
                   "config": {k: cfg[k] for k in ("fee", "slippage", "stopLoss", "maxDailyLoss", "allocation", "interval", "label", "capital")},
-                  "strategies": strats,
+                  "strategies": strats + ([
+                      {"id": "fund", "name": cfg["fund"]["name"], "kind": "fund", "desc": cfg["fund"]["desc"]},
+                      {"id": "index", "name": "Índice cripto", "kind": "index", "desc": "Referencia del fondo: reparte el capital a partes iguales entre los mismos activos al empezar y no vuelve a tocar nada."}
+                  ] if "fund" in state["portfolios"] else []),
+                  "fundConfig": cfg.get("fund"),
                   "candles": [[k["T"], k["c"]] for k in closed[-200:]]})
     # backtest de referencia sobre las velas disponibles (~30 días con velas de 1 h)
     state["backtest"] = {st["id"]: backtest(closed, cfg, st) for st in strats}
+    state["backtest"].update(state.get("fundBacktest", {}))
 
     os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
     tmp = STATE_PATH + ".tmp"

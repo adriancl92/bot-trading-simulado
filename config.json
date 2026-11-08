@@ -9,15 +9,92 @@
   "maxDailyLoss": 0.03,
   "allocation": 1.0,
   "strategies": [
-    {"id": "tsmom", "name": "Momentum", "kind": "tsmom", "params": {"n": 48},
-     "desc": "Compra si el precio está por encima del de hace 48 horas. La estrategia con más respaldo académico en cripto."},
-    {"id": "trend", "name": "Tendencia", "kind": "trend", "params": {"n": 50},
-     "desc": "Compra con el precio por encima de su media de 50 horas; sale cuando cae por debajo."},
-    {"id": "cross", "name": "Cruce de medias", "kind": "cross", "params": {"f": 20, "s": 100},
-     "desc": "Compra cuando la media exponencial de 20 h supera a la de 100 h."},
-    {"id": "rsi", "name": "Reversión RSI", "kind": "rsi", "params": {"n": 14, "lo": 30, "hi": 55},
-     "desc": "Compra tras caídas fuertes (RSI < 30) y vende en el rebote. Grupo de control."},
-    {"id": "hold", "name": "Comprar y mantener", "kind": "hold", "params": {},
-     "desc": "Referencia: compra al empezar y no vende nunca."}
-  ]
+    {
+      "id": "tsmom",
+      "name": "Momentum",
+      "kind": "tsmom",
+      "params": {
+        "n": 48
+      },
+      "desc": "Compra si el precio está por encima del de hace 48 horas. La estrategia con más respaldo académico en cripto."
+    },
+    {
+      "id": "trend",
+      "name": "Tendencia",
+      "kind": "trend",
+      "params": {
+        "n": 50
+      },
+      "desc": "Compra con el precio por encima de su media de 50 horas; sale cuando cae por debajo."
+    },
+    {
+      "id": "cross",
+      "name": "Cruce de medias",
+      "kind": "cross",
+      "params": {
+        "f": 20,
+        "s": 100
+      },
+      "desc": "Compra cuando la media exponencial de 20 h supera a la de 100 h."
+    },
+    {
+      "id": "rsi",
+      "name": "Reversión RSI",
+      "kind": "rsi",
+      "params": {
+        "n": 14,
+        "lo": 30,
+        "hi": 55
+      },
+      "desc": "Compra tras caídas fuertes (RSI < 30) y vende en el rebote. Grupo de control."
+    },
+    {
+      "id": "hold",
+      "name": "Comprar y mantener",
+      "kind": "hold",
+      "params": {},
+      "desc": "Referencia: compra al empezar y no vende nunca."
+    }
+  ],
+  "fund": {
+    "enabled": true,
+    "name": "Fondo multi-activo",
+    "desc": "Cada día elige hasta 4 activos con momentum de 14 días positivo y precio sobre su media de 7 días. Reparte más peso a los menos volátiles, con un máximo del 40 % por activo, y deja el resto en liquidez.",
+    "lookback": 336,
+    "trendSma": 168,
+    "volWindow": 168,
+    "maxAssets": 4,
+    "maxWeight": 0.4,
+    "threshold": 0.03,
+    "assets": [
+      {
+        "pair": "XBTEUR",
+        "symbol": "BTC"
+      },
+      {
+        "pair": "ETHEUR",
+        "symbol": "ETH"
+      },
+      {
+        "pair": "SOLEUR",
+        "symbol": "SOL"
+      },
+      {
+        "pair": "XRPEUR",
+        "symbol": "XRP"
+      },
+      {
+        "pair": "ADAEUR",
+        "symbol": "ADA"
+      },
+      {
+        "pair": "LINKEUR",
+        "symbol": "LINK"
+      },
+      {
+        "pair": "PAXGEUR",
+        "symbol": "ORO"
+      }
+    ]
+  }
 }
