@@ -80,13 +80,15 @@ def rsi_arr(c, n):
         a[k] = 100.0 if l == 0 else 100 - 100 / (1 + g / l)
     return a
 
+def f0(x): return f"{x:,.0f}".replace(",", ".")
+
 def make_signal(kind, p, closes):
     """Devuelve f(i, pos) -> (señal 1/0/None, texto)."""
     if kind == "cross":
         ef, es = ema_arr(closes, p["f"]), ema_arr(closes, p["s"])
         def f(i, pos):
             if ef[i] is None or es[i] is None: return None, "calentando"
-            return (1 if ef[i] > es[i] else 0), f"EMA{p['f']} {ef[i]:,.0f} vs EMA{p['s']} {es[i]:,.0f}"
+            return (1 if ef[i] > es[i] else 0), f"EMA{p['f']} {f0(ef[i])} vs EMA{p['s']} {f0(es[i])}"
         return f
     if kind == "tsmom":
         def f(i, pos):
@@ -110,7 +112,7 @@ def make_signal(kind, p, closes):
     def f(i, pos):
         m = sma_at(closes, i, p["n"])
         if m is None: return None, "calentando"
-        return (1 if closes[i] > m else 0), f"precio {closes[i]:,.0f} vs media {m:,.0f}"
+        return (1 if closes[i] > m else 0), f"precio {f0(closes[i])} vs media {f0(m)}"
     return f
 
 # ----------------------------------------------------------------- motor
