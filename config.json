@@ -1,0 +1,23 @@
+{
+  "capital": 200,
+  "pair": "XBTEUR",
+  "label": "BTC / EUR",
+  "interval": 60,
+  "fee": 0.001,
+  "slippage": 0.0005,
+  "stopLoss": 0.05,
+  "maxDailyLoss": 0.03,
+  "allocation": 1.0,
+  "strategies": [
+    {"id": "tsmom", "name": "Momentum", "kind": "tsmom", "params": {"n": 48},
+     "desc": "Compra si el precio está por encima del de hace 48 horas. La estrategia con más respaldo académico en cripto."},
+    {"id": "trend", "name": "Tendencia", "kind": "trend", "params": {"n": 50},
+     "desc": "Compra con el precio por encima de su media de 50 horas; sale cuando cae por debajo."},
+    {"id": "cross", "name": "Cruce de medias", "kind": "cross", "params": {"f": 20, "s": 100},
+     "desc": "Compra cuando la media exponencial de 20 h supera a la de 100 h."},
+    {"id": "rsi", "name": "Reversión RSI", "kind": "rsi", "params": {"n": 14, "lo": 30, "hi": 55},
+     "desc": "Compra tras caídas fuertes (RSI < 30) y vende en el rebote. Grupo de control."},
+    {"id": "hold", "name": "Comprar y mantener", "kind": "hold", "params": {},
+     "desc": "Referencia: compra al empezar y no vende nunca."}
+  ]
+}

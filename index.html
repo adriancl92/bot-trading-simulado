@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot de trading · panel</title>
+<style>
+:root{--bg:#0e1116;--card:#161b22;--line:#262d36;--txt:#e6edf3;--mut:#8b949e;--up:#2ea043;--dn:#f85149;--acc:#4c8dff;--warn:#d29922}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{padding:14px 16px;border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0 0 4px;font-weight:600}
+.sub{color:var(--mut);font-size:12px}
+main{max-width:1100px;margin:0 auto;padding:14px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:0 0 10px;font-weight:600}
+.hero{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end}
+.hero .big{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.pill{font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--mut);display:inline-block}
+.pill.ok{color:var(--up);border-color:var(--up)}.pill.late{color:var(--warn);border-color:var(--warn)}
+.strats{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.st{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;position:relative}
+.st.sel{border-color:var(--acc)}
+.st .name{font-weight:600;display:flex;align-items:center;gap:8px}
+.st .dot{width:10px;height:10px;border-radius:50%}
+.st .val{font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.st .row{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:3px;gap:8px}
+.st .rank{position:absolute;top:10px;right:12px;font-size:12px;color:var(--mut)}
+.up{color:var(--up)!important}.dn{color:var(--dn)!important}
+canvas{width:100%;height:250px;display:block}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--mut);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--mut);font-weight:500;font-size:12px}
+th:first-child,td:first-child{text-align:left}
+.scroll{overflow:auto;max-height:340px}
+#log div{font-size:13px;border-bottom:1px dashed #21262d;padding:5px 0}
+#log .t{color:var(--mut);font-size:12px;margin-right:6px}
+.tag{font-size:11px;padding:2px 7px;border-radius:6px;font-weight:600}
+.tag.b{background:#12361d;color:#56d364}.tag.s{background:#3b1418;color:#ff7b72}
+.note{font-size:12px;color:var(--mut)}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{background:#21262d;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer}
+.tabs button.on{background:var(--acc);border-color:var(--acc)}
+.err{background:#2d1214;border:1px solid var(--dn);color:#ffb3ad;border-radius:10px;padding:10px 12px;display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bot de trading · simulación con precios reales</h1>
+  <div class="sub" id="hdr">Cargando…</div>
+</header>
+<main>
+  <div class="err" id="err"></div>
+
+  <section class="card">
+    <div class="hero">
+      <div><div class="sub" id="mkt">Precio</div><div class="big" id="price">—</div></div>
+      <div><div class="sub">Última actualización</div><div id="upd">—</div></div>
+      <div><div class="sub">Próximo cierre de vela</div><div id="next">—</div></div>
+      <div><span class="pill" id="status">—</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Estrategias (cada una con el mismo capital inicial)</h2>
+    <div class="strats" id="strats"></div>
+    <p class="note" id="sdesc" style="margin:10px 0 0"></p>
+  </section>
+
+  <section class="card">
+    <h2>Evolución del valor de cada cartera</h2>
+    <div class="tabs" id="range">
+      <button data-r="1">24 h</button><button data-r="7">7 días</button><button data-r="0" class="on">Todo</button>
+    </div>
+    <canvas id="cEq"></canvas>
+    <div class="legend" id="legEq"></div>
+  </section>
+
+  <section class="card">
+    <h2 id="hPrice">Precio y operaciones</h2>
+    <canvas id="cPx"></canvas>
+    <div class="legend"><span><i style="background:#8b949e"></i>Precio (cierre de vela)</span><span><i style="background:#2ea043"></i>Compra</span><span><i style="background:#f85149"></i>Venta</span></div>
+  </section>
+
+  <section class="card">
+    <h2 id="hTr">Operaciones</h2>
+    <div class="scroll"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Precio</th><th>Importe</th><th>Resultado</th></tr></thead><tbody id="tTr"></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Actividad del bot</h2>
+    <div class="scroll" id="log"></div>
+  </section>
+
+  <section class="card">
+    <h2>Backtest de referencia (velas disponibles, con costes)</h2>
+    <p class="note" id="btInfo"></p>
+    <div class="scroll"><table><thead><tr><th>Estrategia</th><th>Rentabilidad</th><th>Caída máx.</th><th>Operaciones</th><th>Acierto</th><th>Comisiones</th></tr></thead><tbody id="tBt"></tbody></table></div>
+  </section>
+
+  <section class="card note" id="foot"></section>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id), TZ="Europe/Madrid";
+const COLORS={tsmom:"#4c8dff",trend:"#a371f7",cross:"#3fb950",rsi:"#d29922",hold:"#8b949e"};
+const col=id=>COLORS[id]||"#79c0ff";
+const n=(x,d=2)=>isFinite(x)?x.toLocaleString("es-ES",{minimumFractionDigits:d,maximumFractionDigits:d}):"—";
+const eur=x=>n(x, Math.abs(x)>=1000?0:2)+" €";
+const pct=x=>x==null||!isFinite(x)?"—":(x>=0?"+":"")+n(x*100,2)+" %";
+const dt=(t,o)=>new Date(t*1000).toLocaleString("es-ES",{timeZone:TZ,...(o||{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})});
+const dayKey=t=>new Date(t*1000).toLocaleDateString("es-ES",{timeZone:TZ});
+const sgn=(el,x)=>{el.classList.remove("up","dn"); if(x>0)el.classList.add("up"); else if(x<0)el.classList.add("dn");};
+let S=null, SEL="tsmom", RANGE=0;
+
+function setupCanvas(cv){const d=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*d;cv.height=h*d;const x=cv.getContext("2d");x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,w,h);return{x,w,h};}
+function draw(cv,series,markers,fmtY){const{x,w,h}=setupCanvas(cv);const pad={l:6,r:64,t:10,b:20};
+  const all=series.flatMap(s=>s.pts);if(all.length<2){x.fillStyle="#8b949e";x.font="13px sans-serif";x.fillText("Aún hay pocos datos: vuelve en un rato.",10,24);return;}
+  let t0=Math.min(...all.map(p=>p[0])),t1=Math.max(...all.map(p=>p[0]));let y0=Math.min(...all.map(p=>p[1])),y1=Math.max(...all.map(p=>p[1]));const m=(y1-y0)*.08||Math.abs(y1)*.01||1;y0-=m;y1+=m;if(t1===t0)t1=t0+1;
+  const X=t=>pad.l+(t-t0)/(t1-t0)*(w-pad.l-pad.r),Y=y=>pad.t+(1-(y-y0)/(y1-y0))*(h-pad.t-pad.b);
+  x.font="11px sans-serif";x.lineWidth=1;
+  for(let g=0;g<=4;g++){const v=y0+(y1-y0)*g/4,yy=Y(v);x.strokeStyle="#21262d";x.beginPath();x.moveTo(pad.l,yy);x.lineTo(w-pad.r,yy);x.stroke();x.fillStyle="#8b949e";x.fillText(fmtY(v),w-pad.r+4,yy+4);}
+  x.fillStyle="#8b949e";x.fillText(dt(t0),pad.l,h-5);const e=dt(t1);x.fillText(e,w-pad.r-x.measureText(e).width,h-5);
+  for(const s of series){x.strokeStyle=s.color;x.lineWidth=s.w||1.8;x.beginPath();s.pts.forEach((p,i)=>i?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1])));x.stroke();}
+  for(const k of markers||[]){if(k.t<t0||k.t>t1)continue;const px=X(k.t),py=Y(k.y);x.fillStyle=k.buy?"#2ea043":"#f85149";x.beginPath();if(k.buy){x.moveTo(px,py+3);x.lineTo(px-5,py+11);x.lineTo(px+5,py+11);}else{x.moveTo(px,py-3);x.lineTo(px-5,py-11);x.lineTo(px+5,py-11);}x.fill();}
+}
+
+function render(){ if(!S) return; const c=S.config, now=Date.now()/1000;
+  $("hdr").textContent=`${c.label} · velas de ${c.interval} min · ${eur(S.capital)} por estrategia · en marcha desde ${dt(S.startedAt)}`;
+  $("mkt").textContent=`Precio ${c.label} (Kraken)`; $("price").textContent=eur(S.price);
+  const age=now-S.updatedAt; $("upd").textContent=`${dt(S.updatedAt,{hour:"2-digit",minute:"2-digit"})} (hace ${Math.round(age/60)} min)`;
+  const st=$("status"); if(age<40*60){st.textContent="Bot activo";st.className="pill ok";}else{st.textContent="Sin actualizar desde hace "+Math.round(age/60)+" min";st.className="pill late";}
+  if(S.nextCandleClose){const l=S.nextCandleClose-now;$("next").textContent=l>0?`${dt(S.nextCandleClose,{hour:"2-digit",minute:"2-digit"})} (en ${Math.ceil(l/60)} min)`:"procesándose en la próxima ejecución";}
+  // tarjetas
+  const today=dayKey(now); const firstToday=S.curve.find(p=>dayKey(p.t)===today);
+  const rows=S.strategies.map(s=>{const pf=S.portfolios[s.id],eq=pf.cash+pf.qty*S.price;return{s,pf,eq,ret:eq/pf.start-1,day:firstToday&&firstToday[s.id]?eq/firstToday[s.id]-1:0};}).sort((a,b)=>b.eq-a.eq);
+  $("strats").innerHTML=rows.map((r,i)=>{const pos=r.pf.qty>0;const pnl=pos?r.pf.qty*S.price*(1-c.slippage)*(1-c.fee)-r.pf.entryCost:0;
+    return `<div class="st ${r.s.id===SEL?"sel":""}" data-id="${r.s.id}"><span class="rank">#${i+1}</span>
+    <div class="name"><span class="dot" style="background:${col(r.s.id)}"></span>${r.s.name}</div>
+    <div class="val ${r.ret>0?"up":r.ret<0?"dn":""}">${eur(r.eq)}</div>
+    <div class="row"><span>Total</span><span class="${r.ret>0?"up":r.ret<0?"dn":""}">${pct(r.ret)}</span></div>
+    <div class="row"><span>Hoy</span><span class="${r.day>0?"up":r.day<0?"dn":""}">${pct(r.day)}</span></div>
+    <div class="row"><span>${pos?"Comprado":"En liquidez"}</span><span>${pos?`${pnl>=0?"+":""}${eur(pnl)} abierta`:(r.pf.halted?"pausa hasta mañana":r.pf.stopped?"tras stop":"esperando señal")}</span></div>
+    <div class="row"><span>${r.pf.trades.length} operaciones</span><span>comisiones ${eur(r.pf.fees)}</span></div>
+    <div class="row" style="white-space:normal"><span>${r.pf.lastTxt||""}</span></div></div>`;}).join("");
+  document.querySelectorAll(".st").forEach(el=>el.onclick=()=>{SEL=el.dataset.id;render();});
+  const sel=S.strategies.find(s=>s.id===SEL)||S.strategies[0]; SEL=sel.id; $("sdesc").textContent=`${sel.name}: ${sel.desc} Pulsa una tarjeta para ver sus operaciones.`;
+  // evolución
+  const from=RANGE?now-RANGE*86400:0; const cv=S.curve.filter(p=>p.t>=from);
+  draw($("cEq"),S.strategies.map(s=>({color:col(s.id),w:s.id===SEL?2.6:1.4,pts:cv.filter(p=>p[s.id]!=null).map(p=>[p.t,p[s.id]])})),null,v=>n(v,v>=1000?0:2));
+  $("legEq").innerHTML=S.strategies.map(s=>`<span><i style="background:${col(s.id)}"></i>${s.name}</span>`).join("");
+  // precio + operaciones de la seleccionada
+  const pf=S.portfolios[sel.id]; $("hPrice").textContent=`Precio y operaciones · ${sel.name}`; $("hTr").textContent=`Operaciones · ${sel.name}`;
+  draw($("cPx"),[{color:"#8b949e",pts:S.candles.map(k=>[k[0],k[1]])}],pf.trades.map(t=>({t:t.t,y:t.price,buy:t.side==="COMPRA"})),v=>n(v,0));
+  $("tTr").innerHTML=pf.trades.slice().reverse().map(t=>`<tr><td>${dt(t.t)}</td><td><span class="tag ${t.side==="COMPRA"?"b":"s"}">${t.side}</span></td><td>${n(t.price)}</td><td>${eur(t.amount)}</td><td>${t.side==="VENTA"?`<span class="${t.pnl>=0?"up":"dn"}">${eur(t.pnl)} (${pct(t.pnlPct)})</span>`:`<span class="note">${t.reason}</span>`}</td></tr>`).join("")||`<tr><td colspan="5" class="note">Todavía no ha operado.</td></tr>`;
+  // registro
+  $("log").innerHTML=S.log.slice().reverse().map(l=>`<div class="${l.kind==="b"?"up":l.kind==="s"?"dn":""}"><span class="t">${dt(l.t)}</span>${l.msg}</div>`).join("");
+  // backtest
+  const b0=Object.values(S.backtest)[0]; if(b0&&b0.from) $("btInfo").textContent=`Del ${dt(b0.from)} al ${dt(b0.to)}, con las mismas reglas, comisión ${n(c.fee*100)} % y slippage ${n(c.slippage*100)} %. Es solo orientativo: un periodo tan corto no demuestra nada.`;
+  $("tBt").innerHTML=S.strategies.map(s=>{const b=S.backtest[s.id];return `<tr><td><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col(s.id)};margin-right:6px"></span>${s.name}</td><td class="${b.ret>0?"up":"dn"}">${pct(b.ret)}</td><td class="dn">${pct(b.mdd)}</td><td>${b.trades}</td><td>${b.winRate==null?"—":n(b.winRate*100,0)+" %"}</td><td>${eur(b.fees)}</td></tr>`;}).join("");
+  $("foot").innerHTML=`<b>Qué es esto.</b> Un bot que se ejecuta solo cada ~15 minutos en GitHub Actions, lee los precios reales de ${c.label} en Kraken y simula órdenes a mercado al cierre de cada vela. Cobra ${n(c.fee*100)} % de comisión y ${n(c.slippage*100)} % de slippage por operación, con stop-loss del ${n(c.stopLoss*100,1)} % y pausa si una cartera pierde un ${n(c.maxDailyLoss*100,1)} % en el día. No mueve dinero real. Los horarios de GitHub pueden retrasarse unos minutos. Resultados pasados no garantizan los futuros. No es asesoramiento financiero.`;
+}
+
+async function load(){ try{ const r=await fetch("data/state.json?ts="+Date.now(),{cache:"no-store"}); if(!r.ok) throw new Error(r.status); S=await r.json(); $("err").style.display="none"; render(); }
+  catch(e){ $("err").style.display="block"; $("err").textContent="No he podido cargar los datos del bot ("+e.message+"). Si acabas de crearlo, espera a la primera ejecución."; } }
+$("range").onclick=e=>{const b=e.target.closest("button");if(!b)return;RANGE=+b.dataset.r;document.querySelectorAll("#range button").forEach(x=>x.classList.toggle("on",x===b));render();};
+window.addEventListener("resize",render); load(); setInterval(load,60000); setInterval(render,30000);
+</script>
+</body>
+</html>
