@@ -1,8 +1,10 @@
 name: Bot de trading (simulado)
 
+# El bot corre en un bucle de ~5 h 40 min que se ejecuta cada 15 minutos y, al terminar,
+# se relanza a sí mismo. El cron solo sirve de respaldo por si la cadena se corta.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7 */2 * * *"
   workflow_dispatch:
     inputs:
       reset_capital:
@@ -12,8 +14,7 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
+  actions: write
 
 concurrency:
   group: bot
@@ -22,34 +23,35 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Ejecutar bot
+      - name: Bucle del bot (cada 15 min)
         env:
-          RESET_CAPITAL: ${{ github.event.inputs.reset_capital }}
-        run: python bot.py
-      - name: Guardar estado
+          RESET_CAPITAL_INPUT: ${{ github.event.inputs.reset_capital }}
         run: |
           git config user.name "trading-bot"
           git config user.email "trading-bot@users.noreply.github.com"
-          git add data/state.json config.json
-          git commit -m "Actualización del bot $(date -u +%Y-%m-%dT%H:%MZ)" || echo "sin cambios"
-          git pull --rebase || true
-          git push
-      - name: Preparar web
-        run: |
-          mkdir -p _site/data
-          cp index.html _site/
-          cp data/state.json _site/data/
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          end=$(( $(date +%s) + 340*60 ))
+          first=1
+          while [ "$(date +%s)" -lt "$end" ]; do
+            git pull -q --rebase || true
+            if [ "$first" = "1" ]; then export RESET_CAPITAL="$RESET_CAPITAL_INPUT"; else export RESET_CAPITAL=""; fi
+            first=0
+            python bot.py || echo "fallo en esta ejecución, se reintenta en la siguiente"
+            git add data/state.json config.json
+            if git commit -qm "Actualización del bot $(date -u +%Y-%m-%dT%H:%MZ)"; then
+              for i in 1 2 3; do git pull -q --rebase && git push -q && break; sleep 5; done
+            fi
+            now=$(date +%s); next=$(( (now/900 + 1)*900 + 30 ))
+            [ "$next" -ge "$end" ] && break
+            sleep $(( next - now ))
+          done
+      - name: Relanzar el bot
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run bot.yml --ref main -R ${{ github.repository }}

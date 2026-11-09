@@ -181,7 +181,9 @@ function renderFund(){ const f=S.portfolios.fund; if(!f){$("fundCard").style.dis
     +`<tr><td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#30363d;margin-right:6px"></span>Liquidez (EUR)</td><td>${n(f.cash/E*100,1)} %</td><td>${eur(f.cash)}</td><td colspan="4"></td></tr>`;
   $("fundNote").textContent=`${fc.desc||""} Última revisión: ${f.lastRebalance||"—"}. «Estado hoy» es lo que el fondo haría si revisara ahora; solo opera en la revisión diaria.`;
 }
-async function load(){ try{ const r=await fetch("data/state.json?ts="+Date.now(),{cache:"no-store"}); if(!r.ok) throw new Error(r.status); S=await r.json(); $("err").style.display="none"; render(); }
+const RAW="https://raw.githubusercontent.com/adriancl92/bot-trading-simulado/main/data/state.json";
+async function getState(){ for(const u of [RAW+"?ts="+Date.now(), "data/state.json?ts="+Date.now()]){ try{ const r=await fetch(u,{cache:"no-store"}); if(r.ok) return await r.json(); }catch(e){} } throw new Error("sin conexión"); }
+async function load(){ try{ const ns=await getState(); if(S&&ns.updatedAt<S.updatedAt) return; S=ns; $("err").style.display="none"; render(); }
   catch(e){ $("err").style.display="block"; $("err").textContent="No he podido cargar los datos del bot ("+e.message+"). Si acabas de crearlo, espera a la primera ejecución."; } }
 $("range").onclick=e=>{const b=e.target.closest("button");if(!b)return;RANGE=+b.dataset.r;document.querySelectorAll("#range button").forEach(x=>x.classList.toggle("on",x===b));render();};
 window.addEventListener("resize",render); load(); setInterval(load,60000); setInterval(render,30000);
